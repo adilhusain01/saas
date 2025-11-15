@@ -144,7 +144,7 @@ export default function ProfilePage() {
   };
 
   const isSubscriptionCancellable = (subscription: Subscription) => {
-    return subscription.status === 'active' && subscription.payment_data?.cancel_at_next_billing_date == null;
+    return subscription.status === 'active' && subscription.payment_data?.cancel_at_next_billing_date !== true;
   };
 
   if (status === 'loading' || loading) {
