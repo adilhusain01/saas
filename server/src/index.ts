@@ -109,10 +109,6 @@ app.post('/api/webhooks/dodo', express.raw({ type: 'application/json' }), async 
         console.log('Subscription failed:', event.data);
         // Handle subscription failure
         break;
-      case 'payment.succeeded':
-        console.log('Payment succeeded:', event.data);
-        await handlePaymentCompleted(event.data);
-        break;
       default:
         console.log('Unhandled webhook event:', event.type);
     }
@@ -234,12 +230,10 @@ async function handlePaymentCompleted(data: any) {
     let sessionId, customerEmail, amount, currency, productId, planType;
 
     if (data.payload_type === 'Payment') {
-      // payment.succeeded event structure
-      sessionId = data.id || data.payment_id;
-      customerEmail = data.customer?.email;
-      amount = data.amount; // in cents
-      currency = data.currency || 'usd';
-      productId = data.product_cart?.[0]?.product_id;
+      // payment.succeeded event structure - often for subscription renewals
+      // Skip saving these since subscription data is already saved on subscription.active
+      console.log('Skipping payment.succeeded event - subscription payments handled via subscription events');
+      return;
     } else {
       // checkout.session.completed event structure
       sessionId = data.id;
@@ -247,6 +241,11 @@ async function handlePaymentCompleted(data: any) {
       amount = data.amount_total; // in cents
       currency = data.currency || 'usd';
       productId = data.product_cart?.[0]?.product_id;
+    }
+
+    if (!productId) {
+      console.error('No product_id found in payment data, skipping save');
+      return;
     }
 
     // Determine plan type from product ID
@@ -295,11 +294,16 @@ async function handleSubscriptionCreated(data: any) {
     console.log('Processing subscription creation:', data);
 
     // Extract subscription data
-    const subscriptionId = data.id;
+    const subscriptionId = data.subscription_id || data.id;
     const customerEmail = data.customer?.email;
-    const productId = data.product_cart?.[0]?.product_id;
-    const amount = data.amount_total; // in cents
+    const productId = data.product_id;
+    const amount = data.recurring_pre_tax_amount || data.amount_total; // in cents
     const currency = data.currency || 'usd';
+
+    if (!subscriptionId || !productId) {
+      console.error('Missing subscription ID or product ID in subscription data');
+      return;
+    }
 
     // Find user by email
     const { data: user, error: userError } = await supabase
