@@ -512,8 +512,9 @@ app.post('/api/subscriptions/cancel', async (req, res) => {
       }
 
       // Use the SDK's update method to cancel the subscription
+      // Note: Dodo Payments only supports cancelling at the next billing date
       await dodoClient.subscriptions.update(subscriptionId, {
-        cancel_at_next_billing_date: !cancelImmediately
+        cancel_at_next_billing_date: true
       });
 
       console.log('Subscription cancellation initiated in Dodo for:', subscriptionId);
@@ -524,7 +525,8 @@ app.post('/api/subscriptions/cancel', async (req, res) => {
       console.log('Retrieved updated subscription:', updatedSubscription.subscription_id);
 
       // Update the status in our database
-      const newStatus = cancelImmediately ? 'cancelled' : 'active';
+      // Since Dodo only cancels at next billing, keep as active until webhook
+      const newStatus = 'active';
       const { error: updateError } = await supabase
         .from('purchases')
         .update({

@@ -121,9 +121,11 @@ export default function ProfilePage() {
   const getSubscriptionStatus = (subscription: Subscription) => {
     const status = subscription.status;
     const cancelAtNext = subscription.payment_data?.cancel_at_next_billing_date;
+    const expiresAt = subscription.payment_data?.expires_at;
 
     if (status === 'cancelled') {
-      return 'Cancelled';
+      const expiryText = expiresAt ? ` - Available until ${new Date(expiresAt).toLocaleDateString()}` : '';
+      return `Cancelled${expiryText}`;
     }
     if (status === 'active') {
       if (cancelAtNext === true) {
@@ -231,7 +233,7 @@ export default function ProfilePage() {
                             Amount: ${(subscription.amount / 100).toFixed(2)} {subscription.currency.toUpperCase()}
                           </p>
                           <p className="text-sm text-gray-600">
-                            Status: <span className={`badge ${getSubscriptionStatus(subscription) === 'Active' ? 'badge-success' : getSubscriptionStatus(subscription) === 'Cancelled' ? 'badge-error' : getSubscriptionStatus(subscription) === 'Active (Cancelling at next billing date)' ? 'badge-warning' : 'badge-neutral'}`}>{getSubscriptionStatus(subscription)}</span>
+                            Status: <span className={`badge ${getSubscriptionStatus(subscription).startsWith('Active') ? 'badge-success' : getSubscriptionStatus(subscription).startsWith('Cancelled') ? 'badge-error' : 'badge-neutral'}`}>{getSubscriptionStatus(subscription)}</span>
                           </p>
                           <p className="text-sm text-gray-600">
                             Created: {new Date(subscription.created_at).toLocaleDateString()}
@@ -265,29 +267,11 @@ export default function ProfilePage() {
         <div className="modal-box">
           <h3 className="font-bold text-lg">Cancel Subscription</h3>
           <p className="py-4">
-            Are you sure you want to cancel your subscription? Please choose how you would like to cancel:
+            Are you sure you want to cancel your subscription? The subscription will be cancelled at the next billing date.
           </p>
-          <div className="form-control">
-            <label className="label cursor-pointer">
-              <span className="label-text">Cancel immediately</span>
-              <input
-                type="radio"
-                name="cancel-option"
-                className="radio"
-                checked={cancelImmediately}
-                onChange={() => setCancelImmediately(true)}
-              />
-            </label>
-            <label className="label cursor-pointer">
-              <span className="label-text">Cancel at next billing date</span>
-              <input
-                type="radio"
-                name="cancel-option"
-                className="radio"
-                checked={!cancelImmediately}
-                onChange={() => setCancelImmediately(false)}
-              />
-            </label>
+          <div className="alert alert-info">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" className="stroke-current shrink-0 w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            <span>Note: Dodo Payments only supports cancellation at the next billing date. Immediate cancellation is not available.</span>
           </div>
           <div className="alert alert-warning mt-4">
             <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
