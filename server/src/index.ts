@@ -47,6 +47,78 @@ const paymentLimiter = rateLimit({
 
 app.use(limiter);
 app.use(morgan('combined'));
+
+// Webhook route must come before JSON middleware
+app.post('/api/webhooks/dodo', express.raw({ type: 'application/json' }), async (req, res) => {
+  try {
+    const webhookSecret = process.env.DODO_WEBHOOK_SECRET;
+
+    if (!webhookSecret) {
+      console.error('Missing webhook secret in environment');
+      return res.status(500).json({ error: 'Webhook configuration error' });
+    }
+
+    console.log('Received webhook headers:', {
+      'webhook-id': req.headers['webhook-id'],
+      'webhook-signature': req.headers['webhook-signature'],
+      'webhook-timestamp': req.headers['webhook-timestamp'],
+      'svix-id': req.headers['svix-id'],
+      'svix-signature': req.headers['svix-signature'],
+      'svix-timestamp': req.headers['svix-timestamp'],
+      'user-agent': req.headers['user-agent']
+    });
+
+    const webhook = new Webhook(webhookSecret);
+    const headers = {
+      'webhook-id': (req.headers['webhook-id'] || req.headers['svix-id']) as string,
+      'webhook-signature': (req.headers['webhook-signature'] || req.headers['svix-signature']) as string,
+      'webhook-timestamp': (req.headers['webhook-timestamp'] || req.headers['svix-timestamp']) as string,
+    };
+
+    const body = req.body.toString();
+    console.log('Webhook body length:', body.length);
+    console.log('Webhook body preview:', body.substring(0, 200));
+    const event = webhook.verify(body, headers) as any;
+
+    console.log('Webhook verified successfully, event type:', event.type);
+
+    // Handle different webhook events
+    switch (event.type) {
+      case 'checkout.session.completed':
+        console.log('Payment completed:', event.data);
+        await handlePaymentCompleted(event.data);
+        break;
+      case 'subscription.created':
+        console.log('Subscription created:', event.data);
+        await handleSubscriptionCreated(event.data);
+        break;
+      case 'subscription.active':
+        console.log('Subscription activated:', event.data);
+        // Handle subscription activation
+        break;
+      case 'subscription.renewed':
+        console.log('Subscription renewed:', event.data);
+        // Handle subscription renewal
+        break;
+      case 'subscription.on_hold':
+        console.log('Subscription on hold:', event.data);
+        // Handle subscription on hold
+        break;
+      case 'subscription.failed':
+        console.log('Subscription failed:', event.data);
+        // Handle subscription failure
+        break;
+      default:
+        console.log('Unhandled webhook event:', event.type);
+    }
+
+    res.json({ received: true });
+  } catch (error) {
+    console.error('Webhook processing error:', error);
+    res.status(500).json({ error: 'Webhook processing failed' });
+  }
+});
+
 app.use(express.json({ limit: '10kb' })); // Limit payload size
 
 // CORS configuration
@@ -250,73 +322,6 @@ async function handleSubscriptionCreated(data: any) {
   }
 }
 
-app.post('/api/webhooks/dodo', express.raw({ type: 'application/json' }), async (req, res) => {
-  try {
-    const webhookSecret = process.env.DODO_WEBHOOK_SECRET;
-
-    if (!webhookSecret) {
-      console.error('Missing webhook secret in environment');
-      return res.status(500).json({ error: 'Webhook configuration error' });
-    }
-
-    console.log('Received webhook headers:', {
-      'webhook-id': req.headers['webhook-id'],
-      'webhook-signature': req.headers['webhook-signature'],
-      'webhook-timestamp': req.headers['webhook-timestamp'],
-      'svix-id': req.headers['svix-id'],
-      'svix-signature': req.headers['svix-signature'],
-      'svix-timestamp': req.headers['svix-timestamp'],
-      'user-agent': req.headers['user-agent']
-    });
-
-    const webhook = new Webhook(webhookSecret);
-    const headers = {
-      'webhook-id': (req.headers['webhook-id'] || req.headers['svix-id']) as string,
-      'webhook-signature': (req.headers['webhook-signature'] || req.headers['svix-signature']) as string,
-      'webhook-timestamp': (req.headers['webhook-timestamp'] || req.headers['svix-timestamp']) as string,
-    };
-
-    const body = req.body.toString();
-    console.log('Webhook body length:', body.length);
-    console.log('Webhook body preview:', body.substring(0, 200));
-    const event = webhook.verify(body, headers) as any;
-
-    // Handle different webhook events
-    switch (event.type) {
-      case 'checkout.session.completed':
-        console.log('Payment completed:', event.data);
-        await handlePaymentCompleted(event.data);
-        break;
-      case 'subscription.created':
-        console.log('Subscription created:', event.data);
-        await handleSubscriptionCreated(event.data);
-        break;
-      case 'subscription.active':
-        console.log('Subscription activated:', event.data);
-        // Handle subscription activation
-        break;
-      case 'subscription.renewed':
-        console.log('Subscription renewed:', event.data);
-        // Handle subscription renewal
-        break;
-      case 'subscription.on_hold':
-        console.log('Subscription on hold:', event.data);
-        // Handle subscription on hold
-        break;
-      case 'subscription.failed':
-        console.log('Subscription failed:', event.data);
-        // Handle subscription failure
-        break;
-      default:
-        console.log('Unhandled webhook event:', event.type);
-    }
-
-    res.json({ received: true });
-  } catch (error) {
-    console.error('Webhook processing error:', error);
-    res.status(500).json({ error: 'Webhook processing failed' });
-  }
-});
 
 app.get('/', (req, res) => {
   res.json({ message: 'Server is running' });
