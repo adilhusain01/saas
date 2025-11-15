@@ -29,7 +29,7 @@ export default function Home() {
         max: 'pdt_NKyYYMcKtZ8Hpdfmt4fB4'
       };
 
-      const response = await fetch('http://localhost:8000/api/payments/create-checkout', {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/payments/create-checkout`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
