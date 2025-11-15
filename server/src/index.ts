@@ -7,6 +7,7 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
 import crypto from 'crypto';
+import { Webhook } from 'standardwebhooks';
 import { client as getDodoClient } from './payments.js';
 import { supabase } from './supabase.js';
 
@@ -214,33 +215,22 @@ async function handleSubscriptionCreated(data: any) {
 
 app.post('/api/webhooks/dodo', express.raw({ type: 'application/json' }), async (req, res) => {
   try {
-    const signature = req.headers['x-dodo-signature'] as string;
-    const body = req.body;
     const webhookSecret = process.env.DODO_WEBHOOK_SECRET;
-
-    if (!signature) {
-      console.error('Missing webhook signature');
-      return res.status(400).json({ error: 'Missing signature' });
-    }
 
     if (!webhookSecret) {
       console.error('Missing webhook secret in environment');
       return res.status(500).json({ error: 'Webhook configuration error' });
     }
 
-    // Verify webhook signature
-    const expectedSignature = crypto
-      .createHmac('sha256', webhookSecret)
-      .update(body)
-      .digest('hex');
+    const webhook = new Webhook(webhookSecret);
+    const headers = {
+      'webhook-id': req.headers['webhook-id'] as string,
+      'webhook-signature': req.headers['webhook-signature'] as string,
+      'webhook-timestamp': req.headers['webhook-timestamp'] as string,
+    };
 
-    if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSignature))) {
-      console.error('Invalid webhook signature');
-      return res.status(401).json({ error: 'Invalid signature' });
-    }
-
-    console.log('Webhook signature verified successfully');
-    const event = JSON.parse(body.toString());
+    const body = req.body.toString();
+    const event = webhook.verify(body, headers) as any;
 
     // Handle different webhook events
     switch (event.type) {
@@ -251,6 +241,22 @@ app.post('/api/webhooks/dodo', express.raw({ type: 'application/json' }), async 
       case 'subscription.created':
         console.log('Subscription created:', event.data);
         await handleSubscriptionCreated(event.data);
+        break;
+      case 'subscription.active':
+        console.log('Subscription activated:', event.data);
+        // Handle subscription activation
+        break;
+      case 'subscription.renewed':
+        console.log('Subscription renewed:', event.data);
+        // Handle subscription renewal
+        break;
+      case 'subscription.on_hold':
+        console.log('Subscription on hold:', event.data);
+        // Handle subscription on hold
+        break;
+      case 'subscription.failed':
+        console.log('Subscription failed:', event.data);
+        // Handle subscription failure
         break;
       default:
         console.log('Unhandled webhook event:', event.type);
