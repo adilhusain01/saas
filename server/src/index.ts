@@ -452,6 +452,37 @@ app.post('/api/subscriptions/cancel', async (req, res) => {
       return res.status(404).json({ error: 'Subscription not found' });
     }
 
+    // Cancel the subscription in Dodo by updating it with cancel_at_next_billing_date
+    try {
+      console.log('Attempting to cancel subscription in Dodo:', subscriptionId);
+
+      const baseURL = process.env.DODO_PAYMENTS_API_KEY?.startsWith('test_') ? 'https://test.dodopayments.com' : 'https://live.dodopayments.com';
+
+      const cancelResponse = await fetch(`${baseURL}/subscriptions/${subscriptionId}`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${process.env.DODO_PAYMENTS_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          cancel_at_next_billing_date: true
+        })
+      });
+
+      if (!cancelResponse.ok) {
+        const errorText = await cancelResponse.text();
+        console.error('Failed to cancel subscription in Dodo:', cancelResponse.status, errorText);
+        return res.status(500).json({ error: 'Failed to cancel subscription with payment provider' });
+      }
+
+      const cancelResult = await cancelResponse.json();
+      console.log('Subscription cancellation initiated in Dodo:', cancelResult);
+
+    } catch (dodoError) {
+      console.error('Error calling Dodo API for cancellation:', dodoError);
+      return res.status(500).json({ error: 'Failed to cancel subscription with payment provider' });
+    }
+
     // Update the status in our database
     const { error: updateError } = await supabase
       .from('purchases')
