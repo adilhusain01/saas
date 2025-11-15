@@ -3,9 +3,11 @@
 import { signIn, signOut, useSession } from 'next-auth/react';
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 
 export default function Home() {
   const { data: session } = useSession();
+  const router = useRouter();
   const [loading, setLoading] = useState<string | null>(null);
 
   const handleCheckout = async (plan: string, price: number) => {
@@ -70,7 +72,7 @@ export default function Home() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h8m-8 6h16" />
               </svg>
             </div>
-            <ul tabIndex={0} className="menu menu-sm dropdown-content mt-3 z-[1] p-2 shadow bg-base-100 rounded-box w-52">
+            <ul tabIndex={0} className="menu menu-sm dropdown-content mt-3 z-1 p-2 shadow bg-base-100 rounded-box w-52">
               <li><a>Home</a></li>
               <li><a>Features</a></li>
               <li><a>Pricing</a></li>
@@ -85,6 +87,7 @@ export default function Home() {
             <li><a>Features</a></li>
             <li><a>Pricing</a></li>
             <li><a>About</a></li>
+            {session && <li><a onClick={() => router.push('/profile')}>Profile</a></li>}
           </ul>
         </div>
         <div className="navbar-end gap-2">
@@ -96,7 +99,7 @@ export default function Home() {
                   <img alt="User" src={session.user?.image || ''} />
                 </div>
               </div>
-              <ul tabIndex={0} className="menu menu-sm dropdown-content bg-base-100 rounded-box z-[1] mt-3 w-52 p-2 shadow">
+              <ul tabIndex={0} className="menu menu-sm dropdown-content bg-base-100 rounded-box z-1 mt-3 w-52 p-2 shadow">
                 <li>
                   <a className="justify-between">
                     Profile

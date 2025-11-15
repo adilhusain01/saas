@@ -7,6 +7,7 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
 import crypto from 'crypto';
+import jwt from 'jsonwebtoken';
 import { Webhook } from 'standardwebhooks';
 import { client as getDodoClient } from './payments.js';
 import { supabase } from './supabase.js';
@@ -344,6 +345,129 @@ async function handleSubscriptionCreated(data: any) {
 
 app.get('/', (req, res) => {
   res.json({ message: 'Server is running' });
+});
+
+// User profile endpoints
+app.get('/api/user/profile', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const token = authHeader.substring(7); // Remove 'Bearer ' prefix
+
+    // Verify the JWT token
+    const decoded = jwt.verify(token, process.env.SUPABASE_JWT_SECRET!);
+
+    const userId = decoded.sub;
+    if (!userId) {
+      return res.status(401).json({ error: 'Invalid token' });
+    }
+
+    const { data: user, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', userId)
+      .single();
+
+    if (error) {
+      console.error('Error fetching user profile:', error);
+      return res.status(500).json({ error: 'Failed to fetch profile' });
+    }
+
+    res.json(user);
+  } catch (error) {
+    console.error('Profile fetch error:', error);
+    res.status(401).json({ error: 'Unauthorized' });
+  }
+});
+
+app.get('/api/user/subscriptions', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const token = authHeader.substring(7);
+    const decoded = jwt.verify(token, process.env.SUPABASE_JWT_SECRET!);
+
+    const userId = decoded.sub;
+    console.log('Decoded user ID from JWT:', userId);
+    if (!userId) {
+      return res.status(401).json({ error: 'Invalid token' });
+    }
+
+    const { data: subscriptions, error } = await supabase
+      .from('purchases')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('status', 'active')
+      .order('created_at', { ascending: false });
+
+    console.log('Fetched subscriptions for user', userId, ':', subscriptions);
+
+    if (error) {
+      console.error('Error fetching subscriptions:', error);
+      return res.status(500).json({ error: 'Failed to fetch subscriptions' });
+    }
+
+    res.json(subscriptions || []);
+  } catch (error) {
+    console.error('Subscriptions fetch error:', error);
+    res.status(401).json({ error: 'Unauthorized' });
+  }
+});
+
+app.post('/api/subscriptions/cancel', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const token = authHeader.substring(7);
+    const decoded = jwt.verify(token, process.env.SUPABASE_JWT_SECRET!);
+
+    const userId = decoded.sub;
+    if (!userId) {
+      return res.status(401).json({ error: 'Invalid token' });
+    }
+
+    const { subscriptionId } = req.body;
+    if (!subscriptionId) {
+      return res.status(400).json({ error: 'Subscription ID is required' });
+    }
+
+    // First, check if the subscription belongs to the user
+    const { data: subscription, error: checkError } = await supabase
+      .from('purchases')
+      .select('*')
+      .eq('dodo_session_id', subscriptionId)
+      .eq('user_id', userId)
+      .single();
+
+    if (checkError || !subscription) {
+      return res.status(404).json({ error: 'Subscription not found' });
+    }
+
+    // Update the status in our database
+    const { error: updateError } = await supabase
+      .from('purchases')
+      .update({ status: 'cancelled' })
+      .eq('dodo_session_id', subscriptionId);
+
+    if (updateError) {
+      console.error('Error updating subscription status:', updateError);
+      return res.status(500).json({ error: 'Failed to update subscription status' });
+    }
+
+    res.json({ message: 'Subscription cancelled successfully' });
+  } catch (error) {
+    console.error('Subscription cancellation error:', error);
+    res.status(401).json({ error: 'Unauthorized' });
+  }
 });
 
 // Migration function to create purchases table
