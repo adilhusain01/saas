@@ -21,6 +21,7 @@ interface Subscription {
   status: string;
   plan_type: string;
   created_at: string;
+  updated_at: string;
   payment_data: any;
 }
 
