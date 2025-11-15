@@ -206,8 +206,45 @@ async function handlePaymentCompleted(data: any) {
 async function handleSubscriptionCreated(data: any) {
   try {
     console.log('Processing subscription creation:', data);
-    // TODO: Handle subscription creation if needed
-    // This would be for recurring subscriptions
+
+    // Extract subscription data
+    const subscriptionId = data.id;
+    const customerEmail = data.customer?.email;
+    const productId = data.product_cart?.[0]?.product_id;
+    const amount = data.amount_total; // in cents
+    const currency = data.currency || 'usd';
+
+    // Find user by email
+    const { data: user, error: userError } = await supabase
+      .from('users')
+      .select('id')
+      .eq('email', customerEmail)
+      .single();
+
+    if (userError || !user) {
+      console.error('User not found for subscription email:', customerEmail);
+      return;
+    }
+
+    // Save subscription to purchases table with subscription info
+    const { error: subscriptionError } = await supabase
+      .from('purchases')
+      .insert({
+        user_id: user.id,
+        dodo_session_id: subscriptionId,
+        product_id: productId,
+        amount: amount,
+        currency: currency,
+        status: 'active', // subscription status
+        plan_type: 'subscription', // or determine from product
+        payment_data: data
+      });
+
+    if (subscriptionError) {
+      console.error('Error saving subscription:', subscriptionError);
+    } else {
+      console.log('Subscription saved successfully for user:', user.id);
+    }
   } catch (error) {
     console.error('Error handling subscription creation:', error);
   }
@@ -222,14 +259,25 @@ app.post('/api/webhooks/dodo', express.raw({ type: 'application/json' }), async 
       return res.status(500).json({ error: 'Webhook configuration error' });
     }
 
+    console.log('Received webhook headers:', {
+      'webhook-id': req.headers['webhook-id'],
+      'webhook-signature': req.headers['webhook-signature'],
+      'webhook-timestamp': req.headers['webhook-timestamp'],
+      'svix-id': req.headers['svix-id'],
+      'svix-signature': req.headers['svix-signature'],
+      'svix-timestamp': req.headers['svix-timestamp'],
+      'user-agent': req.headers['user-agent']
+    });
+
     const webhook = new Webhook(webhookSecret);
     const headers = {
-      'webhook-id': req.headers['webhook-id'] as string,
-      'webhook-signature': req.headers['webhook-signature'] as string,
-      'webhook-timestamp': req.headers['webhook-timestamp'] as string,
+      'webhook-id': (req.headers['webhook-id'] || req.headers['svix-id']) as string,
+      'webhook-signature': (req.headers['webhook-signature'] || req.headers['svix-signature']) as string,
+      'webhook-timestamp': (req.headers['webhook-timestamp'] || req.headers['svix-timestamp']) as string,
     };
 
     const body = req.body.toString();
+    console.log('Webhook body:', body);
     const event = webhook.verify(body, headers) as any;
 
     // Handle different webhook events
