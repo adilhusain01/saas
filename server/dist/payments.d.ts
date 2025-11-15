@@ -1,4 +1,4 @@
 import DodoPayments from 'dodopayments';
-declare const client: DodoPayments;
-export { client };
+declare function getDodoClient(): DodoPayments | null;
+export { getDodoClient as client };
 //# sourceMappingURL=payments.d.ts.map
