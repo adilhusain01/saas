@@ -31,6 +31,9 @@ export default function ProfilePage() {
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [loading, setLoading] = useState(true);
   const [cancelLoading, setCancelLoading] = useState<string | null>(null);
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [selectedSubscription, setSelectedSubscription] = useState<Subscription | null>(null);
+  const [cancelImmediately, setCancelImmediately] = useState(false);
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -80,11 +83,7 @@ export default function ProfilePage() {
     }
   };
 
-  const cancelSubscription = async (subscriptionId: string) => {
-    if (!confirm('Are you sure you want to cancel this subscription?')) {
-      return;
-    }
-
+  const cancelSubscription = async (subscriptionId: string, cancelImmediately: boolean) => {
     setCancelLoading(subscriptionId);
     try {
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/subscriptions/cancel`, {
@@ -93,12 +92,14 @@ export default function ProfilePage() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${(session as any)?.supabaseAccessToken || ''}`,
         },
-        body: JSON.stringify({ subscriptionId }),
+        body: JSON.stringify({ subscriptionId, cancelImmediately }),
       });
 
       if (response.ok) {
         alert('Subscription cancelled successfully');
         fetchSubscriptions(); // Refresh the list
+        setShowCancelModal(false);
+        setSelectedSubscription(null);
       } else {
         const error = await response.json();
         alert(error.error || 'Failed to cancel subscription');
@@ -109,6 +110,26 @@ export default function ProfilePage() {
     } finally {
       setCancelLoading(null);
     }
+  };
+
+  const openCancelModal = (subscription: Subscription) => {
+    setSelectedSubscription(subscription);
+    setCancelImmediately(false);
+    setShowCancelModal(true);
+  };
+
+  const getSubscriptionStatus = (subscription: Subscription) => {
+    if (subscription.payment_data?.cancel_at_next_billing_date === false) {
+      return 'Cancelled';
+    }
+    if (subscription.payment_data?.cancel_at_next_billing_date === true) {
+      return 'Active (Cancelling at next billing date)';
+    }
+    return 'Active';
+  };
+
+  const isSubscriptionCancellable = (subscription: Subscription) => {
+    return subscription.payment_data?.cancel_at_next_billing_date == null;
   };
 
   if (status === 'loading' || loading) {
@@ -195,23 +216,25 @@ export default function ProfilePage() {
                             Amount: ${(subscription.amount / 100).toFixed(2)} {subscription.currency.toUpperCase()}
                           </p>
                           <p className="text-sm text-gray-600">
-                            Status: <span className="badge badge-success">{subscription.status}</span>
+                            Status: <span className={`badge ${subscription.payment_data?.cancel_at_next_billing_date === false ? 'badge-error' : subscription.payment_data?.cancel_at_next_billing_date === true ? 'badge-warning' : 'badge-success'}`}>{getSubscriptionStatus(subscription)}</span>
                           </p>
                           <p className="text-sm text-gray-600">
                             Created: {new Date(subscription.created_at).toLocaleDateString()}
                           </p>
                         </div>
-                        <button
-                          className="btn btn-error btn-sm"
-                          onClick={() => cancelSubscription(subscription.dodo_session_id)}
-                          disabled={cancelLoading === subscription.dodo_session_id}
-                        >
-                          {cancelLoading === subscription.dodo_session_id ? (
-                            <div className="loading loading-spinner loading-xs"></div>
-                          ) : (
-                            'Cancel'
-                          )}
-                        </button>
+                        {isSubscriptionCancellable(subscription) && (
+                          <button
+                            className="btn btn-error btn-sm"
+                            onClick={() => openCancelModal(subscription)}
+                            disabled={cancelLoading === subscription.dodo_session_id}
+                          >
+                            {cancelLoading === subscription.dodo_session_id ? (
+                              <div className="loading loading-spinner loading-xs"></div>
+                            ) : (
+                              'Cancel'
+                            )}
+                          </button>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -221,6 +244,58 @@ export default function ProfilePage() {
           </div>
         </div>
       </div>
+
+      {/* Cancel Subscription Modal */}
+      <dialog className={`modal ${showCancelModal ? 'modal-open' : ''}`}>
+        <div className="modal-box">
+          <h3 className="font-bold text-lg">Cancel Subscription</h3>
+          <p className="py-4">
+            Are you sure you want to cancel your subscription? Please choose how you would like to cancel:
+          </p>
+          <div className="form-control">
+            <label className="label cursor-pointer">
+              <span className="label-text">Cancel immediately</span>
+              <input
+                type="radio"
+                name="cancel-option"
+                className="radio"
+                checked={cancelImmediately}
+                onChange={() => setCancelImmediately(true)}
+              />
+            </label>
+            <label className="label cursor-pointer">
+              <span className="label-text">Cancel at next billing date</span>
+              <input
+                type="radio"
+                name="cancel-option"
+                className="radio"
+                checked={!cancelImmediately}
+                onChange={() => setCancelImmediately(false)}
+              />
+            </label>
+          </div>
+          <div className="alert alert-warning mt-4">
+            <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            <span>Warning: Refund is not applicable for subscription cancellations.</span>
+          </div>
+          <div className="modal-action">
+            <button className="btn" onClick={() => setShowCancelModal(false)}>Cancel</button>
+            <button
+              className="btn btn-error"
+              onClick={() => selectedSubscription && cancelSubscription(selectedSubscription.dodo_session_id, cancelImmediately)}
+              disabled={cancelLoading === selectedSubscription?.dodo_session_id}
+            >
+              {cancelLoading === selectedSubscription?.dodo_session_id ? (
+                <div className="loading loading-spinner loading-sm"></div>
+              ) : (
+                'Confirm Cancellation'
+              )}
+            </button>
+          </div>
+        </div>
+      </dialog>
     </div>
   );
 }

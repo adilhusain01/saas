@@ -50,6 +50,50 @@ const paymentLimiter = rateLimit({
 app.use(limiter);
 app.use(morgan('combined'));
 
+async function handleSubscriptionCancelled(data: any) {
+  try {
+    console.log('Processing subscription cancellation:', data);
+
+    const subscriptionId = data.subscription_id || data.id;
+    const customerEmail = data.customer?.email;
+
+    if (!subscriptionId) {
+      console.error('Missing subscription ID in cancellation data');
+      return;
+    }
+
+    // Find user by email
+    const { data: user, error: userError } = await supabase
+      .from('users')
+      .select('id')
+      .eq('email', customerEmail)
+      .single();
+
+    if (userError || !user) {
+      console.error('User not found for subscription email:', customerEmail);
+      return;
+    }
+
+    // Update subscription status to cancelled
+    const { error: updateError } = await supabase
+      .from('purchases')
+      .update({
+        status: 'cancelled',
+        payment_data: data
+      })
+      .eq('dodo_session_id', subscriptionId)
+      .eq('user_id', user.id);
+
+    if (updateError) {
+      console.error('Error updating subscription status to cancelled:', updateError);
+    } else {
+      console.log('Subscription cancelled successfully for user:', user.id);
+    }
+  } catch (error) {
+    console.error('Error handling subscription cancellation:', error);
+  }
+}
+
 // Webhook route must come before JSON middleware
 app.post('/api/webhooks/dodo', express.raw({ type: 'application/json' }), async (req, res) => {
   try {
@@ -109,6 +153,10 @@ app.post('/api/webhooks/dodo', express.raw({ type: 'application/json' }), async 
       case 'subscription.failed':
         console.log('Subscription failed:', event.data);
         // Handle subscription failure
+        break;
+      case 'subscription.cancelled':
+        console.log('Subscription cancelled:', event.data);
+        await handleSubscriptionCancelled(event.data);
         break;
       default:
         console.log('Unhandled webhook event:', event.type);
@@ -342,7 +390,6 @@ async function handleSubscriptionCreated(data: any) {
   }
 }
 
-
 app.get('/', (req, res) => {
   res.json({ message: 'Server is running' });
 });
@@ -413,6 +460,8 @@ app.get('/api/user/subscriptions', async (req, res) => {
       return res.status(500).json({ error: 'Failed to fetch subscriptions' });
     }
 
+    console.log(JSON.stringify(subscriptions));
+    
     res.json(subscriptions || []);
   } catch (error) {
     console.error('Subscriptions fetch error:', error);
@@ -435,7 +484,7 @@ app.post('/api/subscriptions/cancel', async (req, res) => {
       return res.status(401).json({ error: 'Invalid token' });
     }
 
-    const { subscriptionId } = req.body;
+    const { subscriptionId, cancelImmediately = false } = req.body;
     if (!subscriptionId) {
       return res.status(400).json({ error: 'Subscription ID is required' });
     }
@@ -453,6 +502,7 @@ app.post('/api/subscriptions/cancel', async (req, res) => {
     }
 
     // Cancel the subscription in Dodo using the SDK
+    let updatedSubscription: any = null;
     try {
       console.log('Attempting to cancel subscription in Dodo:', subscriptionId);
 
@@ -463,26 +513,36 @@ app.post('/api/subscriptions/cancel', async (req, res) => {
       }
 
       // Use the SDK's update method to cancel the subscription
-      const updatedSubscription = await dodoClient.subscriptions.update(subscriptionId, {
-        cancel_at_next_billing_date: true
+      await dodoClient.subscriptions.update(subscriptionId, {
+        cancel_at_next_billing_date: !cancelImmediately
       });
 
-      console.log('Subscription cancellation initiated in Dodo:', updatedSubscription.subscription_id);
+      console.log('Subscription cancellation initiated in Dodo for:', subscriptionId);
+
+      // Retrieve the updated subscription data
+      updatedSubscription = await dodoClient.subscriptions.retrieve(subscriptionId);
+
+      console.log('Retrieved updated subscription:', updatedSubscription.subscription_id);
+
+      // Update the status in our database
+      const newStatus = cancelImmediately ? 'cancelled' : 'active';
+      const { error: updateError } = await supabase
+        .from('purchases')
+        .update({
+          status: newStatus,
+          payment_data: updatedSubscription
+        })
+        .eq('dodo_session_id', subscriptionId);
+
+      if (updateError) {
+        console.error('Error updating subscription status:', updateError);
+        return res.status(500).json({ error: 'Failed to update subscription status' });
+      }
 
     } catch (dodoError) {
       console.error('Error calling Dodo API for cancellation:', dodoError);
+      // If Dodo error, but we might have updated DB, but for now, return error
       return res.status(500).json({ error: 'Failed to cancel subscription with payment provider' });
-    }
-
-    // Update the status in our database
-    const { error: updateError } = await supabase
-      .from('purchases')
-      .update({ status: 'cancelled' })
-      .eq('dodo_session_id', subscriptionId);
-
-    if (updateError) {
-      console.error('Error updating subscription status:', updateError);
-      return res.status(500).json({ error: 'Failed to update subscription status' });
     }
 
     res.json({ message: 'Subscription cancelled successfully' });
