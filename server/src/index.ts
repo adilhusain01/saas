@@ -15,7 +15,8 @@ const app = express();
 const PORT = process.env.PORT || 8000;
 
 // Trust proxy for accurate IP detection behind load balancers/reverse proxies
-app.set('trust proxy', true);
+// Use 'loopback' for local development, or specify trusted proxies in production
+app.set('trust proxy', process.env.NODE_ENV === 'production' ? 'loopback,linklocal,uniquelocal' : 'loopback');
 
 app.use(helmet({
   contentSecurityPolicy: {
@@ -94,7 +95,7 @@ app.post('/api/webhooks/dodo', express.raw({ type: 'application/json' }), async 
         break;
       case 'subscription.active':
         console.log('Subscription activated:', event.data);
-        // Handle subscription activation
+        await handleSubscriptionCreated(event.data);
         break;
       case 'subscription.renewed':
         console.log('Subscription renewed:', event.data);
@@ -107,6 +108,10 @@ app.post('/api/webhooks/dodo', express.raw({ type: 'application/json' }), async 
       case 'subscription.failed':
         console.log('Subscription failed:', event.data);
         // Handle subscription failure
+        break;
+      case 'payment.succeeded':
+        console.log('Payment succeeded:', event.data);
+        await handlePaymentCompleted(event.data);
         break;
       default:
         console.log('Unhandled webhook event:', event.type);
@@ -225,17 +230,27 @@ async function handlePaymentCompleted(data: any) {
   try {
     console.log('Processing payment completion:', data);
 
-    // Extract relevant data from Dodo webhook
-    const sessionId = data.id;
-    const customerEmail = data.customer?.email;
-    const amount = data.amount_total; // in cents
-    const currency = data.currency || 'usd';
+    // Handle different webhook payload structures
+    let sessionId, customerEmail, amount, currency, productId, planType;
 
-    // Find the product and plan type from the session
-    // This is a simplified approach - in production you'd store this mapping
-    const productId = data.product_cart?.[0]?.product_id;
-    let planType = 'basic'; // default
+    if (data.payload_type === 'Payment') {
+      // payment.succeeded event structure
+      sessionId = data.id || data.payment_id;
+      customerEmail = data.customer?.email;
+      amount = data.amount; // in cents
+      currency = data.currency || 'usd';
+      productId = data.product_cart?.[0]?.product_id;
+    } else {
+      // checkout.session.completed event structure
+      sessionId = data.id;
+      customerEmail = data.customer?.email;
+      amount = data.amount_total; // in cents
+      currency = data.currency || 'usd';
+      productId = data.product_cart?.[0]?.product_id;
+    }
 
+    // Determine plan type from product ID
+    planType = 'basic'; // default
     if (productId === 'pdt_YQiSHzKDpVGlDUuYaSCR2') planType = 'pro';
     else if (productId === 'pdt_NKyYYMcKtZ8Hpdfmt4fB4') planType = 'max';
 
