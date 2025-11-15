@@ -74,6 +74,7 @@ export default function ProfilePage() {
 
       if (response.ok) {
         const data = await response.json();
+        console.log('Subscriptions data:', data);
         setSubscriptions(data);
       }
     } catch (error) {
@@ -123,18 +124,21 @@ export default function ProfilePage() {
     const cancelAtNext = subscription.payment_data?.cancel_at_next_billing_date;
     const expiresAt = subscription.payment_data?.expires_at;
     const nextBillingDate = subscription.payment_data?.next_billing_date;
+    const cancelledAt = subscription.payment_data?.cancelled_at;
 
     if (status === 'cancelled') {
-      if (expiresAt && new Date(expiresAt) <= new Date()) {
-        return `Cancelled (expired on ${new Date(expiresAt).toLocaleDateString()})`;
+      const cancelledDate = cancelledAt || subscription.updated_at;
+      if (nextBillingDate) {
+        return `Cancelled on ${new Date(cancelledDate).toLocaleDateString()} (active until ${new Date(nextBillingDate).toLocaleDateString()}, no future charges)`;
       }
-      return 'Cancelled';
+      return `Cancelled on ${new Date(cancelledDate).toLocaleDateString()}`;
     }
     if (status === 'active') {
+      const createdDate = new Date(subscription.created_at).toLocaleDateString();
       if (cancelAtNext === true && nextBillingDate) {
-        return `Active until ${new Date(nextBillingDate).toLocaleDateString()}`;
+        return `Active until ${new Date(nextBillingDate).toLocaleDateString()} (created on ${createdDate})`;
       }
-      return 'Active';
+      return `Active since ${createdDate}`;
     }
     if (status === 'on_hold') {
       return 'Inactive';

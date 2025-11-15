@@ -79,7 +79,7 @@ async function handleSubscriptionCancelled(data: any) {
       .from('purchases')
       .update({
         status: 'cancelled',
-        payment_data: data
+        payment_data: { ...data, cancelled_at: new Date().toISOString() }
       })
       .eq('dodo_session_id', subscriptionId)
       .eq('user_id', user.id);
