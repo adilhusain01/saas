@@ -232,26 +232,24 @@ app.get('/', (req, res) => {
     res.json({ message: 'Server is running' });
 });
 // Migration function to create purchases table
-async function runMigrations() {
-    try {
-        console.log('Checking for purchases table...');
-        // Try to select from purchases table to see if it exists
-        const { error } = await supabase.from('purchases').select('id').limit(1);
-        if (error && error.code === 'PGRST116') { // Table doesn't exist
-            console.log('Purchases table does not exist. Please run the SQL manually:');
-            console.log('Execute the contents of supabase-setup.sql in your Supabase SQL editor');
-            console.log('Or use: supabase db push (if you have Supabase CLI installed)');
-        }
-        else {
-            console.log('Purchases table exists');
-        }
-    }
-    catch (error) {
-        console.error('Migration check error:', error);
-    }
-}
+// async function runMigrations() {
+//   try {
+//     console.log('Checking for purchases table...');
+//     // Try to select from purchases table to see if it exists
+//     const { error } = await supabase.from('purchases').select('id').limit(1);
+//     if (error && error.code === 'PGRST116') { // Table doesn't exist
+//       console.log('Purchases table does not exist. Please run the SQL manually:');
+//       console.log('Execute the contents of supabase-setup.sql in your Supabase SQL editor');
+//       console.log('Or use: supabase db push (if you have Supabase CLI installed)');
+//     } else {
+//       console.log('Purchases table exists');
+//     }
+//   } catch (error) {
+//     console.error('Migration check error:', error);
+//   }
+// }
 app.listen(PORT, async () => {
     console.log(`Server running on port ${PORT}`);
-    await runMigrations();
+    // await runMigrations();
 });
 //# sourceMappingURL=index.js.map

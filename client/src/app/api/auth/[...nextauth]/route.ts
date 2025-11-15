@@ -2,7 +2,13 @@ import NextAuth from "next-auth"
 import { SupabaseAdapter } from "@auth/supabase-adapter"
 import jwt from "jsonwebtoken"
 import Google from "next-auth/providers/google"
+import { createClient } from "@supabase/supabase-js"
 import { supabase } from "@/lib/supabase"
+
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [
@@ -12,14 +18,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   })
   ],
   adapter: SupabaseAdapter({
-    url: process.env.SUPABASE_URL!,
+    url: process.env.NEXT_PUBLIC_SUPABASE_URL!,
     secret: process.env.SUPABASE_SERVICE_ROLE_KEY!,
   }),
   events: {
     signIn: async ({ user, account, profile }) => {
       if (user.id && user.email) {
         // Create or update user profile in public.users table
-        const { error } = await supabase
+        const { error } = await supabaseAdmin
           .from('users')
           .upsert({
             id: user.id,
