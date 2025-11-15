@@ -277,7 +277,8 @@ app.post('/api/webhooks/dodo', express.raw({ type: 'application/json' }), async 
     };
 
     const body = req.body.toString();
-    console.log('Webhook body:', body);
+    console.log('Webhook body length:', body.length);
+    console.log('Webhook body preview:', body.substring(0, 200));
     const event = webhook.verify(body, headers) as any;
 
     // Handle different webhook events
