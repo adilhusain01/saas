@@ -13,6 +13,9 @@ import { supabase } from './supabase.js';
 const app = express();
 const PORT = process.env.PORT || 8000;
 
+// Trust proxy for accurate IP detection behind load balancers/reverse proxies
+app.set('trust proxy', true);
+
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
