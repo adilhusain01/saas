@@ -7,8 +7,8 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
 import crypto from 'crypto';
-import { client as getDodoClient } from './payments';
-import { supabase } from './supabase';
+import { client as getDodoClient } from './payments.js';
+import { supabase } from './supabase.js';
 
 const app = express();
 const PORT = process.env.PORT || 8000;

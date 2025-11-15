@@ -1,5 +1,6 @@
 {
   // Visit https://aka.ms/tsconfig to read more about this file
+  "include": ["src/**/*"],
   "compilerOptions": {
     // File Layout
     "rootDir": "./src",
@@ -7,11 +8,10 @@
 
     // Environment Settings
     // See also https://aka.ms/tsconfig/module
-    "module": "ES2022",
+    "module": "Node16",
     "target": "ES2022",
-    "moduleResolution": "node",
+    "moduleResolution": "node16",
     "allowSyntheticDefaultImports": true,
-    "types": [],
     // For nodejs:
     "lib": ["esnext"],
     "types": ["node"],
