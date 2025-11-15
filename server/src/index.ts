@@ -450,7 +450,6 @@ app.get('/api/user/subscriptions', async (req, res) => {
       .from('purchases')
       .select('*')
       .eq('user_id', userId)
-      .eq('status', 'active')
       .order('created_at', { ascending: false });
 
     console.log('Fetched subscriptions for user', userId, ':', subscriptions);

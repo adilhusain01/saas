@@ -119,17 +119,32 @@ export default function ProfilePage() {
   };
 
   const getSubscriptionStatus = (subscription: Subscription) => {
-    if (subscription.payment_data?.cancel_at_next_billing_date === false) {
+    const status = subscription.status;
+    const cancelAtNext = subscription.payment_data?.cancel_at_next_billing_date;
+
+    if (status === 'cancelled') {
       return 'Cancelled';
     }
-    if (subscription.payment_data?.cancel_at_next_billing_date === true) {
-      return 'Active (Cancelling at next billing date)';
+    if (status === 'active') {
+      if (cancelAtNext === true) {
+        return 'Active (Cancelling at next billing date)';
+      }
+      return 'Active';
     }
-    return 'Active';
+    if (status === 'on_hold') {
+      return 'Inactive';
+    }
+    if (status === 'failed') {
+      return 'Failed';
+    }
+    if (status === 'expired') {
+      return 'Expired';
+    }
+    return status.charAt(0).toUpperCase() + status.slice(1); // Capitalize other statuses
   };
 
   const isSubscriptionCancellable = (subscription: Subscription) => {
-    return subscription.payment_data?.cancel_at_next_billing_date == null;
+    return subscription.status === 'active' && subscription.payment_data?.cancel_at_next_billing_date == null;
   };
 
   if (status === 'loading' || loading) {
@@ -190,13 +205,13 @@ export default function ProfilePage() {
             </div>
           </div>
 
-          {/* Active Subscriptions */}
+          {/* Subscriptions */}
           <div className="card bg-base-100 shadow-xl">
             <div className="card-body">
-              <h2 className="card-title">Active Subscriptions</h2>
+              <h2 className="card-title">Subscriptions</h2>
 
               {subscriptions.length === 0 ? (
-                <p className="text-gray-600">No active subscriptions found.</p>
+                <p className="text-gray-600">No subscriptions found.</p>
               ) : (
                 <div className="space-y-4">
                   {subscriptions.map((subscription) => (
@@ -216,7 +231,7 @@ export default function ProfilePage() {
                             Amount: ${(subscription.amount / 100).toFixed(2)} {subscription.currency.toUpperCase()}
                           </p>
                           <p className="text-sm text-gray-600">
-                            Status: <span className={`badge ${subscription.payment_data?.cancel_at_next_billing_date === false ? 'badge-error' : subscription.payment_data?.cancel_at_next_billing_date === true ? 'badge-warning' : 'badge-success'}`}>{getSubscriptionStatus(subscription)}</span>
+                            Status: <span className={`badge ${getSubscriptionStatus(subscription) === 'Active' ? 'badge-success' : getSubscriptionStatus(subscription) === 'Cancelled' ? 'badge-error' : getSubscriptionStatus(subscription) === 'Active (Cancelling at next billing date)' ? 'badge-warning' : 'badge-neutral'}`}>{getSubscriptionStatus(subscription)}</span>
                           </p>
                           <p className="text-sm text-gray-600">
                             Created: {new Date(subscription.created_at).toLocaleDateString()}
