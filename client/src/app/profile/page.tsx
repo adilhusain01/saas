@@ -122,14 +122,17 @@ export default function ProfilePage() {
     const status = subscription.status;
     const cancelAtNext = subscription.payment_data?.cancel_at_next_billing_date;
     const expiresAt = subscription.payment_data?.expires_at;
+    const nextBillingDate = subscription.payment_data?.next_billing_date;
 
     if (status === 'cancelled') {
-      const expiryText = expiresAt ? ` - Available until ${new Date(expiresAt).toLocaleDateString()}` : '';
-      return `Cancelled${expiryText}`;
+      if (expiresAt && new Date(expiresAt) <= new Date()) {
+        return `Cancelled (expired on ${new Date(expiresAt).toLocaleDateString()})`;
+      }
+      return 'Cancelled';
     }
     if (status === 'active') {
-      if (cancelAtNext === true) {
-        return 'Active (Cancelling at next billing date)';
+      if (cancelAtNext === true && nextBillingDate) {
+        return `Active until ${new Date(nextBillingDate).toLocaleDateString()}`;
       }
       return 'Active';
     }
