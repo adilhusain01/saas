@@ -43,7 +43,7 @@ app.use(limiter);
 app.use(morgan('combined'));
 async function handleSubscriptionCancelled(data) {
     try {
-        console.log('Processing subscription cancellation:', data);
+        // console.log('Processing subscription cancellation:', data);
         const subscriptionId = data.subscription_id || data.id;
         const customerEmail = data.customer?.email;
         if (!subscriptionId) {
@@ -88,15 +88,15 @@ app.post('/api/webhooks/dodo', express.raw({ type: 'application/json' }), async 
             console.error('Missing webhook secret in environment');
             return res.status(500).json({ error: 'Webhook configuration error' });
         }
-        console.log('Received webhook headers:', {
-            'webhook-id': req.headers['webhook-id'],
-            'webhook-signature': req.headers['webhook-signature'],
-            'webhook-timestamp': req.headers['webhook-timestamp'],
-            'svix-id': req.headers['svix-id'],
-            'svix-signature': req.headers['svix-signature'],
-            'svix-timestamp': req.headers['svix-timestamp'],
-            'user-agent': req.headers['user-agent']
-        });
+        // console.log('Received webhook headers:', {
+        //     'webhook-id': req.headers['webhook-id'],
+        //     'webhook-signature': req.headers['webhook-signature'],
+        //     'webhook-timestamp': req.headers['webhook-timestamp'],
+        //     'svix-id': req.headers['svix-id'],
+        //     'svix-signature': req.headers['svix-signature'],
+        //     'svix-timestamp': req.headers['svix-timestamp'],
+        //     'user-agent': req.headers['user-agent']
+        // });
         const webhook = new Webhook(webhookSecret);
         const headers = {
             'webhook-id': (req.headers['webhook-id'] || req.headers['svix-id']),
@@ -104,10 +104,10 @@ app.post('/api/webhooks/dodo', express.raw({ type: 'application/json' }), async 
             'webhook-timestamp': (req.headers['webhook-timestamp'] || req.headers['svix-timestamp']),
         };
         const body = req.body.toString();
-        console.log('Webhook body length:', body.length);
-        console.log('Webhook body preview:', body.substring(0, 200));
+        // console.log('Webhook body length:', body.length);
+        // console.log('Webhook body preview:', body.substring(0, 200));
         const event = webhook.verify(body, headers);
-        console.log('Webhook verified successfully, event type:', event.type);
+        // console.log('Webhook verified successfully, event type:', event.type);
         // Handle different webhook events
         switch (event.type) {
             case 'checkout.session.completed':
@@ -237,7 +237,7 @@ app.post('/api/payments/create-checkout', paymentLimiter, async (req, res) => {
 // Webhook event handlers
 async function handlePaymentCompleted(data) {
     try {
-        console.log('Processing payment completion:', data);
+        // console.log('Processing payment completion:', data);
         // Handle different webhook payload structures
         let sessionId, customerEmail, amount, currency, productId, planType;
         if (data.payload_type === 'Payment') {
@@ -300,7 +300,7 @@ async function handlePaymentCompleted(data) {
 }
 async function handleSubscriptionCreated(data) {
     try {
-        console.log('Processing subscription creation:', data);
+        // console.log('Processing subscription creation:', data);
         // Extract subscription data
         const subscriptionId = data.subscription_id || data.id;
         const customerEmail = data.customer?.email;

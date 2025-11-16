@@ -11,7 +11,7 @@ function ThemeLogger({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     // Keep console logs for debugging - this shows what next-themes reports
-    console.log('Theme changed to:', theme, 'resolved:', resolvedTheme);
+    // console.log('Theme changed to:', theme, 'resolved:', resolvedTheme);
 
     // Sync Tailwind dark mode class with next-themes' resolved theme value.
     // next-themes is configured with attribute="data-theme" to support DaisyUI.

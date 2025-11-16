@@ -75,7 +75,7 @@ export default function ProfilePage() {
 
       if (response.ok) {
         const data = await response.json();
-        console.log('Subscriptions data:', data);
+        // console.log('Subscriptions data:', data);
         setSubscriptions(data);
       }
     } catch (error) {

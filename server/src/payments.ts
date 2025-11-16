@@ -5,7 +5,7 @@ let client: DodoPayments | null = null;
 function getDodoClient() {
   if (!client) {
     const apiKey = process.env.DODO_PAYMENTS_API_KEY;
-    console.log('Getting Dodo client, API key:', apiKey ? 'present' : 'missing');
+    // console.log('Getting Dodo client, API key:', apiKey ? 'present' : 'missing');
 
     if (apiKey && apiKey.trim() !== '' && apiKey !== 'your-dodo-api-key') {
       console.log('Initializing Dodo client...');

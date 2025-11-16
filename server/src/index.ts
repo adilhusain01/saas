@@ -52,7 +52,7 @@ app.use(morgan('combined'));
 
 async function handleSubscriptionCancelled(data: any) {
   try {
-    console.log('Processing subscription cancellation:', data);
+    // console.log('Processing subscription cancellation:', data);
 
     const subscriptionId = data.subscription_id || data.id;
     const customerEmail = data.customer?.email;
@@ -104,15 +104,15 @@ app.post('/api/webhooks/dodo', express.raw({ type: 'application/json' }), async 
       return res.status(500).json({ error: 'Webhook configuration error' });
     }
 
-    console.log('Received webhook headers:', {
-      'webhook-id': req.headers['webhook-id'],
-      'webhook-signature': req.headers['webhook-signature'],
-      'webhook-timestamp': req.headers['webhook-timestamp'],
-      'svix-id': req.headers['svix-id'],
-      'svix-signature': req.headers['svix-signature'],
-      'svix-timestamp': req.headers['svix-timestamp'],
-      'user-agent': req.headers['user-agent']
-    });
+    // console.log('Received webhook headers:', {
+    //   'webhook-id': req.headers['webhook-id'],
+    //   'webhook-signature': req.headers['webhook-signature'],
+    //   'webhook-timestamp': req.headers['webhook-timestamp'],
+    //   'svix-id': req.headers['svix-id'],
+    //   'svix-signature': req.headers['svix-signature'],
+    //   'svix-timestamp': req.headers['svix-timestamp'],
+    //   'user-agent': req.headers['user-agent']
+    // });
 
     const webhook = new Webhook(webhookSecret);
     const headers = {
@@ -122,8 +122,8 @@ app.post('/api/webhooks/dodo', express.raw({ type: 'application/json' }), async 
     };
 
     const body = req.body.toString();
-    console.log('Webhook body length:', body.length);
-    console.log('Webhook body preview:', body.substring(0, 200));
+    // console.log('Webhook body length:', body.length);
+    // console.log('Webhook body preview:', body.substring(0, 200));
     const event = webhook.verify(body, headers) as any;
 
     console.log('Webhook verified successfully, event type:', event.type);
@@ -273,7 +273,7 @@ app.post('/api/payments/create-checkout', paymentLimiter, async (req, res) => {
 // Webhook event handlers
 async function handlePaymentCompleted(data: any) {
   try {
-    console.log('Processing payment completion:', data);
+    // console.log('Processing payment completion:', data);
 
     // Handle different webhook payload structures
     let sessionId, customerEmail, amount, currency, productId, planType;
@@ -452,14 +452,14 @@ app.get('/api/user/subscriptions', async (req, res) => {
       .eq('user_id', userId)
       .order('created_at', { ascending: false });
 
-    console.log('Fetched subscriptions for user', userId, ':', subscriptions);
+    // console.log('Fetched subscriptions for user', userId, ':', subscriptions);
 
     if (error) {
       console.error('Error fetching subscriptions:', error);
       return res.status(500).json({ error: 'Failed to fetch subscriptions' });
     }
 
-    console.log(JSON.stringify(subscriptions));
+    // console.log(JSON.stringify(subscriptions));
     
     res.json(subscriptions || []);
   } catch (error) {
