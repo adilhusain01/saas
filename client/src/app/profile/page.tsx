@@ -159,8 +159,41 @@ export default function ProfilePage() {
 
   if (status === 'loading' || loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="loading loading-spinner loading-lg"></div>
+      <div className="min-h-screen bg-base-200">
+        <div className="container mx-auto px-4 py-8">
+          <div className="max-w-4xl mx-auto">
+            <div className="skeleton h-8 w-48 mb-8"></div>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div className="lg:col-span-1">
+                <div className="card bg-base-100 shadow-xl">
+                  <div className="card-body">
+                    <div className="skeleton h-6 w-32 mb-4"></div>
+                    <div className="flex items-center gap-4">
+                      <div className="skeleton w-16 h-16 rounded-full"></div>
+                      <div className="space-y-2">
+                        <div className="skeleton h-4 w-24"></div>
+                        <div className="skeleton h-4 w-32"></div>
+                        <div className="skeleton h-3 w-28"></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="lg:col-span-2">
+                <div className="card bg-base-100 shadow-xl">
+                  <div className="card-body">
+                    <div className="skeleton h-6 w-32 mb-4"></div>
+                    <div className="space-y-3">
+                      <div className="skeleton h-4 w-full"></div>
+                      <div className="skeleton h-4 w-full"></div>
+                      <div className="skeleton h-4 w-3/4"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
@@ -173,6 +206,17 @@ export default function ProfilePage() {
     <div className="min-h-screen bg-base-200">
       <div className="navbar bg-base-100 shadow-lg">
         <div className="navbar-start">
+          <div className="dropdown">
+            <div tabIndex={0} role="button" className="btn btn-ghost lg:hidden">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16"></path>
+              </svg>
+            </div>
+            <ul tabIndex={0} className="menu menu-sm dropdown-content mt-3 z-1 p-2 shadow bg-base-100 rounded-box w-52">
+              <li><a onClick={() => router.push('/')}>Home</a></li>
+              <li><a onClick={() => router.push('/profile')}>Profile</a></li>
+            </ul>
+          </div>
           <a className="btn btn-ghost text-xl font-bold" onClick={() => router.push('/')}>
             SaaS Template
           </a>
@@ -191,80 +235,93 @@ export default function ProfilePage() {
       </div>
 
       <div className="container mx-auto px-4 py-8">
-        <div className="max-w-4xl mx-auto">
+        <div className="max-w-6xl mx-auto">
           <h1 className="text-3xl font-bold mb-8">Profile</h1>
 
-          {/* Profile Information */}
-          <div className="card bg-base-100 shadow-xl mb-8">
-            <div className="card-body">
-              <h2 className="card-title">Profile Information</h2>
-              <div className="flex items-center gap-4 mb-4">
-                <div className="avatar">
-                  <div className="w-16 rounded-full">
-                    <img src={profile?.image || session.user?.image || ''} alt="Profile" />
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Profile Information */}
+            <div className="lg:col-span-1">
+              <div className="card bg-base-100 shadow-xl">
+                <div className="card-body">
+                  <h2 className="card-title">Profile Information</h2>
+                  <div className="flex items-center gap-4 mb-4">
+                    <div className="avatar">
+                      <div className="w-16 rounded-full">
+                        <img src={profile?.image || session.user?.image || ''} alt="Profile" />
+                      </div>
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-semibold">{profile?.name || session.user?.name}</h3>
+                      <p className="text-base-content/70">{profile?.email || session.user?.email}</p>
+                      <p className="text-sm text-base-content/50">
+                        Member since: {profile?.created_at ? new Date(profile.created_at).toLocaleDateString() : 'N/A'}
+                      </p>
+                    </div>
                   </div>
-                </div>
-                <div>
-                  <h3 className="text-xl font-semibold">{profile?.name || session.user?.name}</h3>
-                  <p className="text-gray-600">{profile?.email || session.user?.email}</p>
-                  <p className="text-sm text-gray-500">
-                    Member since: {profile?.created_at ? new Date(profile.created_at).toLocaleDateString() : 'N/A'}
-                  </p>
                 </div>
               </div>
             </div>
-          </div>
 
-          {/* Subscriptions */}
-          <div className="card bg-base-100 shadow-xl">
-            <div className="card-body">
-              <h2 className="card-title">Subscriptions</h2>
+            {/* Subscriptions */}
+            <div className="lg:col-span-2">
+              <div className="card bg-base-100 shadow-xl">
+                <div className="card-body">
+                  <h2 className="card-title">Subscriptions</h2>
 
               {subscriptions.length === 0 ? (
-                <p className="text-gray-600">No subscriptions found.</p>
+                <p className="text-base-content/60">No subscriptions found.</p>
               ) : (
-                <div className="space-y-4">
-                  {subscriptions.map((subscription) => (
-                    <div key={subscription.id} className="border border-base-300 rounded-lg p-4">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <h3 className="font-semibold text-lg">
-                            {subscription.plan_type === 'basic' && 'Basic Plan'}
-                            {subscription.plan_type === 'pro' && 'Pro Plan'}
-                            {subscription.plan_type === 'max' && 'Max Plan'}
-                            {subscription.plan_type === 'subscription' && 'Subscription'}
-                          </h3>
-                          <p className="text-sm text-gray-600">
-                            ID: {subscription.dodo_session_id}
-                          </p>
-                          <p className="text-sm text-gray-600">
-                            Amount: ${(subscription.amount / 100).toFixed(2)} {subscription.currency.toUpperCase()}
-                          </p>
-                          <p className="text-sm text-gray-600">
-                            Status: <span className={`badge ${getSubscriptionStatus(subscription).startsWith('Active') ? 'badge-success' : getSubscriptionStatus(subscription).startsWith('Cancelled') ? 'badge-error' : 'badge-neutral'}`}>{getSubscriptionStatus(subscription)}</span>
-                          </p>
-                          <p className="text-sm text-gray-600">
-                            Created: {new Date(subscription.created_at).toLocaleDateString()}
-                          </p>
-                        </div>
-                        {isSubscriptionCancellable(subscription) && (
-                          <button
-                            className="btn btn-error btn-sm"
-                            onClick={() => openCancelModal(subscription)}
-                            disabled={cancelLoading === subscription.dodo_session_id}
-                          >
-                            {cancelLoading === subscription.dodo_session_id ? (
-                              <div className="loading loading-spinner loading-xs"></div>
-                            ) : (
-                              'Cancel'
+                <div className="overflow-x-auto">
+                  <table className="table table-zebra">
+                    <thead>
+                      <tr>
+                        <th>Plan</th>
+                        <th>Amount</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {subscriptions.map((subscription) => (
+                        <tr key={subscription.id}>
+                          <td>
+                            <div>
+                              <div className="font-bold">
+                                {subscription.plan_type === 'basic' && 'Basic Plan'}
+                                {subscription.plan_type === 'pro' && 'Pro Plan'}
+                                {subscription.plan_type === 'max' && 'Max Plan'}
+                                {subscription.plan_type === 'subscription' && 'Subscription'}
+                              </div>
+                              <div className="text-sm opacity-60">ID: {subscription.dodo_session_id}</div>
+                            </div>
+                          </td>
+                          <td>${(subscription.amount / 100).toFixed(2)} {subscription.currency.toUpperCase()}</td>
+                          <td>
+                            <span className={`badge ${getSubscriptionStatus(subscription).includes('Active') ? 'badge-success' : getSubscriptionStatus(subscription).includes('Cancelled') ? 'badge-error' : 'badge-neutral'}`}>{getSubscriptionStatus(subscription)}</span>
+                          </td>
+                          <td>
+                            {isSubscriptionCancellable(subscription) && (
+                              <button
+                                className="btn btn-error btn-xs"
+                                onClick={() => openCancelModal(subscription)}
+                                disabled={cancelLoading === subscription.dodo_session_id}
+                              >
+                                {cancelLoading === subscription.dodo_session_id ? (
+                                  <div className="loading loading-spinner loading-xs"></div>
+                                ) : (
+                                  'Cancel'
+                                )}
+                              </button>
                             )}
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  ))}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               )}
+                </div>
+              </div>
             </div>
           </div>
         </div>

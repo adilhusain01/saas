@@ -5,11 +5,15 @@ import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
-import crypto from 'crypto';
+import jwt from 'jsonwebtoken';
+import { Webhook } from 'standardwebhooks';
 import { client as getDodoClient } from './payments.js';
 import { supabase } from './supabase.js';
 const app = express();
 const PORT = process.env.PORT || 8000;
+// Trust proxy for accurate IP detection behind load balancers/reverse proxies
+// Use 'loopback' for local development, or specify trusted proxies in production
+app.set('trust proxy', process.env.NODE_ENV === 'production' ? 'loopback,linklocal,uniquelocal' : 'loopback');
 app.use(helmet({
     contentSecurityPolicy: {
         directives: {
@@ -37,6 +41,113 @@ const paymentLimiter = rateLimit({
 });
 app.use(limiter);
 app.use(morgan('combined'));
+async function handleSubscriptionCancelled(data) {
+    try {
+        console.log('Processing subscription cancellation:', data);
+        const subscriptionId = data.subscription_id || data.id;
+        const customerEmail = data.customer?.email;
+        if (!subscriptionId) {
+            console.error('Missing subscription ID in cancellation data');
+            return;
+        }
+        // Find user by email
+        const { data: user, error: userError } = await supabase
+            .from('users')
+            .select('id')
+            .eq('email', customerEmail)
+            .single();
+        if (userError || !user) {
+            console.error('User not found for subscription email:', customerEmail);
+            return;
+        }
+        // Update subscription status to cancelled
+        const { error: updateError } = await supabase
+            .from('purchases')
+            .update({
+            status: 'cancelled',
+            payment_data: { ...data, cancelled_at: new Date().toISOString() }
+        })
+            .eq('dodo_session_id', subscriptionId)
+            .eq('user_id', user.id);
+        if (updateError) {
+            console.error('Error updating subscription status to cancelled:', updateError);
+        }
+        else {
+            console.log('Subscription cancelled successfully for user:', user.id);
+        }
+    }
+    catch (error) {
+        console.error('Error handling subscription cancellation:', error);
+    }
+}
+// Webhook route must come before JSON middleware
+app.post('/api/webhooks/dodo', express.raw({ type: 'application/json' }), async (req, res) => {
+    try {
+        const webhookSecret = process.env.DODO_WEBHOOK_SECRET;
+        if (!webhookSecret) {
+            console.error('Missing webhook secret in environment');
+            return res.status(500).json({ error: 'Webhook configuration error' });
+        }
+        console.log('Received webhook headers:', {
+            'webhook-id': req.headers['webhook-id'],
+            'webhook-signature': req.headers['webhook-signature'],
+            'webhook-timestamp': req.headers['webhook-timestamp'],
+            'svix-id': req.headers['svix-id'],
+            'svix-signature': req.headers['svix-signature'],
+            'svix-timestamp': req.headers['svix-timestamp'],
+            'user-agent': req.headers['user-agent']
+        });
+        const webhook = new Webhook(webhookSecret);
+        const headers = {
+            'webhook-id': (req.headers['webhook-id'] || req.headers['svix-id']),
+            'webhook-signature': (req.headers['webhook-signature'] || req.headers['svix-signature']),
+            'webhook-timestamp': (req.headers['webhook-timestamp'] || req.headers['svix-timestamp']),
+        };
+        const body = req.body.toString();
+        console.log('Webhook body length:', body.length);
+        console.log('Webhook body preview:', body.substring(0, 200));
+        const event = webhook.verify(body, headers);
+        console.log('Webhook verified successfully, event type:', event.type);
+        // Handle different webhook events
+        switch (event.type) {
+            case 'checkout.session.completed':
+                console.log('Payment completed:', event.data);
+                await handlePaymentCompleted(event.data);
+                break;
+            case 'subscription.created':
+                console.log('Subscription created:', event.data);
+                await handleSubscriptionCreated(event.data);
+                break;
+            case 'subscription.active':
+                console.log('Subscription activated:', event.data);
+                await handleSubscriptionCreated(event.data);
+                break;
+            case 'subscription.renewed':
+                console.log('Subscription renewed:', event.data);
+                // Handle subscription renewal
+                break;
+            case 'subscription.on_hold':
+                console.log('Subscription on hold:', event.data);
+                // Handle subscription on hold
+                break;
+            case 'subscription.failed':
+                console.log('Subscription failed:', event.data);
+                // Handle subscription failure
+                break;
+            case 'subscription.cancelled':
+                console.log('Subscription cancelled:', event.data);
+                await handleSubscriptionCancelled(event.data);
+                break;
+            default:
+                console.log('Unhandled webhook event:', event.type);
+        }
+        res.json({ received: true });
+    }
+    catch (error) {
+        console.error('Webhook processing error:', error);
+        res.status(500).json({ error: 'Webhook processing failed' });
+    }
+});
 app.use(express.json({ limit: '10kb' })); // Limit payload size
 // CORS configuration
 const corsOptions = {
@@ -127,15 +238,28 @@ app.post('/api/payments/create-checkout', paymentLimiter, async (req, res) => {
 async function handlePaymentCompleted(data) {
     try {
         console.log('Processing payment completion:', data);
-        // Extract relevant data from Dodo webhook
-        const sessionId = data.id;
-        const customerEmail = data.customer?.email;
-        const amount = data.amount_total; // in cents
-        const currency = data.currency || 'usd';
-        // Find the product and plan type from the session
-        // This is a simplified approach - in production you'd store this mapping
-        const productId = data.product_cart?.[0]?.product_id;
-        let planType = 'basic'; // default
+        // Handle different webhook payload structures
+        let sessionId, customerEmail, amount, currency, productId, planType;
+        if (data.payload_type === 'Payment') {
+            // payment.succeeded event structure - often for subscription renewals
+            // Skip saving these since subscription data is already saved on subscription.active
+            console.log('Skipping payment.succeeded event - subscription payments handled via subscription events');
+            return;
+        }
+        else {
+            // checkout.session.completed event structure
+            sessionId = data.id;
+            customerEmail = data.customer?.email;
+            amount = data.amount_total; // in cents
+            currency = data.currency || 'usd';
+            productId = data.product_cart?.[0]?.product_id;
+        }
+        if (!productId) {
+            console.error('No product_id found in payment data, skipping save');
+            return;
+        }
+        // Determine plan type from product ID
+        planType = 'basic'; // default
         if (productId === 'pdt_YQiSHzKDpVGlDUuYaSCR2')
             planType = 'pro';
         else if (productId === 'pdt_NKyYYMcKtZ8Hpdfmt4fB4')
@@ -177,59 +301,184 @@ async function handlePaymentCompleted(data) {
 async function handleSubscriptionCreated(data) {
     try {
         console.log('Processing subscription creation:', data);
-        // TODO: Handle subscription creation if needed
-        // This would be for recurring subscriptions
+        // Extract subscription data
+        const subscriptionId = data.subscription_id || data.id;
+        const customerEmail = data.customer?.email;
+        const productId = data.product_id;
+        const amount = data.recurring_pre_tax_amount || data.amount_total; // in cents
+        const currency = data.currency || 'usd';
+        if (!subscriptionId || !productId) {
+            console.error('Missing subscription ID or product ID in subscription data');
+            return;
+        }
+        // Find user by email
+        const { data: user, error: userError } = await supabase
+            .from('users')
+            .select('id')
+            .eq('email', customerEmail)
+            .single();
+        if (userError || !user) {
+            console.error('User not found for subscription email:', customerEmail);
+            return;
+        }
+        // Save subscription to purchases table with subscription info
+        const { error: subscriptionError } = await supabase
+            .from('purchases')
+            .insert({
+            user_id: user.id,
+            dodo_session_id: subscriptionId,
+            product_id: productId,
+            amount: amount,
+            currency: currency,
+            status: 'active', // subscription status
+            plan_type: 'subscription', // or determine from product
+            payment_data: data
+        });
+        if (subscriptionError) {
+            console.error('Error saving subscription:', subscriptionError);
+        }
+        else {
+            console.log('Subscription saved successfully for user:', user.id);
+        }
     }
     catch (error) {
         console.error('Error handling subscription creation:', error);
     }
 }
-app.post('/api/webhooks/dodo', express.raw({ type: 'application/json' }), async (req, res) => {
-    try {
-        const signature = req.headers['x-dodo-signature'];
-        const body = req.body;
-        const webhookSecret = process.env.DODO_WEBHOOK_SECRET;
-        if (!signature) {
-            console.error('Missing webhook signature');
-            return res.status(400).json({ error: 'Missing signature' });
-        }
-        if (!webhookSecret) {
-            console.error('Missing webhook secret in environment');
-            return res.status(500).json({ error: 'Webhook configuration error' });
-        }
-        // Verify webhook signature
-        const expectedSignature = crypto
-            .createHmac('sha256', webhookSecret)
-            .update(body)
-            .digest('hex');
-        if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSignature))) {
-            console.error('Invalid webhook signature');
-            return res.status(401).json({ error: 'Invalid signature' });
-        }
-        console.log('Webhook signature verified successfully');
-        const event = JSON.parse(body.toString());
-        // Handle different webhook events
-        switch (event.type) {
-            case 'checkout.session.completed':
-                console.log('Payment completed:', event.data);
-                await handlePaymentCompleted(event.data);
-                break;
-            case 'subscription.created':
-                console.log('Subscription created:', event.data);
-                await handleSubscriptionCreated(event.data);
-                break;
-            default:
-                console.log('Unhandled webhook event:', event.type);
-        }
-        res.json({ received: true });
-    }
-    catch (error) {
-        console.error('Webhook processing error:', error);
-        res.status(500).json({ error: 'Webhook processing failed' });
-    }
-});
 app.get('/', (req, res) => {
     res.json({ message: 'Server is running' });
+});
+// User profile endpoints
+app.get('/api/user/profile', async (req, res) => {
+    try {
+        const authHeader = req.headers.authorization;
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            return res.status(401).json({ error: 'Unauthorized' });
+        }
+        const token = authHeader.substring(7); // Remove 'Bearer ' prefix
+        // Verify the JWT token
+        const decoded = jwt.verify(token, process.env.SUPABASE_JWT_SECRET);
+        const userId = decoded.sub;
+        if (!userId) {
+            return res.status(401).json({ error: 'Invalid token' });
+        }
+        const { data: user, error } = await supabase
+            .from('users')
+            .select('*')
+            .eq('id', userId)
+            .single();
+        if (error) {
+            console.error('Error fetching user profile:', error);
+            return res.status(500).json({ error: 'Failed to fetch profile' });
+        }
+        res.json(user);
+    }
+    catch (error) {
+        console.error('Profile fetch error:', error);
+        res.status(401).json({ error: 'Unauthorized' });
+    }
+});
+app.get('/api/user/subscriptions', async (req, res) => {
+    try {
+        const authHeader = req.headers.authorization;
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            return res.status(401).json({ error: 'Unauthorized' });
+        }
+        const token = authHeader.substring(7);
+        const decoded = jwt.verify(token, process.env.SUPABASE_JWT_SECRET);
+        const userId = decoded.sub;
+        console.log('Decoded user ID from JWT:', userId);
+        if (!userId) {
+            return res.status(401).json({ error: 'Invalid token' });
+        }
+        const { data: subscriptions, error } = await supabase
+            .from('purchases')
+            .select('*')
+            .eq('user_id', userId)
+            .order('created_at', { ascending: false });
+        console.log('Fetched subscriptions for user', userId, ':', subscriptions);
+        if (error) {
+            console.error('Error fetching subscriptions:', error);
+            return res.status(500).json({ error: 'Failed to fetch subscriptions' });
+        }
+        console.log(JSON.stringify(subscriptions));
+        res.json(subscriptions || []);
+    }
+    catch (error) {
+        console.error('Subscriptions fetch error:', error);
+        res.status(401).json({ error: 'Unauthorized' });
+    }
+});
+app.post('/api/subscriptions/cancel', async (req, res) => {
+    try {
+        const authHeader = req.headers.authorization;
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            return res.status(401).json({ error: 'Unauthorized' });
+        }
+        const token = authHeader.substring(7);
+        const decoded = jwt.verify(token, process.env.SUPABASE_JWT_SECRET);
+        const userId = decoded.sub;
+        if (!userId) {
+            return res.status(401).json({ error: 'Invalid token' });
+        }
+        const { subscriptionId, cancelImmediately = false } = req.body;
+        if (!subscriptionId) {
+            return res.status(400).json({ error: 'Subscription ID is required' });
+        }
+        // First, check if the subscription belongs to the user
+        const { data: subscription, error: checkError } = await supabase
+            .from('purchases')
+            .select('*')
+            .eq('dodo_session_id', subscriptionId)
+            .eq('user_id', userId)
+            .single();
+        if (checkError || !subscription) {
+            return res.status(404).json({ error: 'Subscription not found' });
+        }
+        // Cancel the subscription in Dodo using the SDK
+        let updatedSubscription = null;
+        try {
+            console.log('Attempting to cancel subscription in Dodo:', subscriptionId);
+            const dodoClient = getDodoClient();
+            if (!dodoClient) {
+                console.error('Dodo client not configured');
+                return res.status(500).json({ error: 'Payment service unavailable' });
+            }
+            // Use the SDK's update method to cancel the subscription
+            // Note: Dodo Payments only supports cancelling at the next billing date
+            await dodoClient.subscriptions.update(subscriptionId, {
+                cancel_at_next_billing_date: true
+            });
+            console.log('Subscription cancellation initiated in Dodo for:', subscriptionId);
+            // Retrieve the updated subscription data
+            updatedSubscription = await dodoClient.subscriptions.retrieve(subscriptionId);
+            console.log('Retrieved updated subscription:', updatedSubscription.subscription_id);
+            // Update the status in our database
+            // Since Dodo only cancels at next billing, keep as active until webhook
+            const newStatus = 'active';
+            const { error: updateError } = await supabase
+                .from('purchases')
+                .update({
+                status: newStatus,
+                payment_data: updatedSubscription
+            })
+                .eq('dodo_session_id', subscriptionId);
+            if (updateError) {
+                console.error('Error updating subscription status:', updateError);
+                return res.status(500).json({ error: 'Failed to update subscription status' });
+            }
+        }
+        catch (dodoError) {
+            console.error('Error calling Dodo API for cancellation:', dodoError);
+            // If Dodo error, but we might have updated DB, but for now, return error
+            return res.status(500).json({ error: 'Failed to cancel subscription with payment provider' });
+        }
+        res.json({ message: 'Subscription cancelled successfully' });
+    }
+    catch (error) {
+        console.error('Subscription cancellation error:', error);
+        res.status(401).json({ error: 'Unauthorized' });
+    }
 });
 // Migration function to create purchases table
 // async function runMigrations() {
